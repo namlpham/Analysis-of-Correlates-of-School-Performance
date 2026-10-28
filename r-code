@@ -1,0 +1,466 @@
+# Regression model building to assess school performance factors
+########################################################################
+
+#Packages needed for this assignment: 
+library(car)  
+library(psych)
+library(corrplot)
+library(tidyverse)
+
+library(stargazer)
+library(sjPlot)
+library(lmtest)
+
+options(scipen=999)
+options(scipen=0)
+
+#Dataset used for analysis is called "calschooldist.csv." This is coming from the California Department of Education  
+#This file contains school outcomes for 400 elementary schools randomly selected across the state of California
+calschool <- read.csv("calschooldist.csv") 
+
+#Step 4: Perform basic checks of the candidate variables. 
+#Do you have any missing value or out of range data problems? (if so, what did you do to resolve them, if anything?). 
+#What is the situation with duplicates?
+
+plot(calschool$acadperf,calschool$meals)
+plot(calschool$acadperf,calschool$grad_sch)
+plot(calschool$acadperf,calschool$not_hsg)
+plot(calschool$acadperf,calschool$full)
+plot(calschool$acadperf,calschool$emer)
+
+#Process for checking for missing values
+describe(calschool) 
+
+#The describe function showed that columns in Mobility(mobility) and Class size (acs) have less than 400 data entries.
+#We want to remove these null values and reassign them into the datasheet
+calschool <- 
+  calschool %>% 
+  drop_na()
+
+calschool_final <- 
+  calschool[, c("snum", "dnum", "acadperf", "meals", "ell", "acs", "hsg", "some_col", "yr_rnd", "not_hsg", 
+                "col_grad", "grad_sch", "full", "emer")]
+
+summary(calschool_final)
+describe(calschool_final)
+
+desc <- describe(calschool_final)
+
+
+
+# create a PDF file and print the table to it
+pdf("my_table.pdf")
+print(table)
+dev.off()
+
+
+# Lets look for duplicates. We have two identifier variables: snum and dnum.
+# Duplicated is a "logical" variable which will be "TRUE" if a case is a
+# duplicate and "FALSE" otherwise
+duplicated(calschool$dnum)
+
+# Assign it to a new column
+calschool$dupdnum <- duplicated(calschool$dnum)
+
+# We can look at how many duplicates there are (Remember, FALSE indicates a
+# non-duplicate)
+table(calschool$dupdnum)
+
+# We can look at how many duplicates there are (Remember, FALSE indicates a
+# non-duplicate)
+table(calschool$dupdnum)
+
+# How many duplicated districts are there? Why? Is this okay?
+
+# Now, lets look at snum. Here it WOULD be a problem if there were duplicates
+calschool$dupsnum <- duplicated(calschool$snum)
+table(calschool$dupsnum)
+table(calschool$dupsnum, calschool$mealcat)
+
+# We don't have any dulication of schools, only school districts since maybe schools can be in the same district)
+
+
+# Step 5: Exploratory Data Analysis
+# What did your check of the correlation matrix find? 
+# Did you add any variables to the end of you list based on it? 
+# Does it look like you need to worry about multicollinearity? 
+
+# 1st option to see correlation matrix: 
+corrmatrix <- cor(calschool, use = "complete.obs") 
+corrmatrix_final <- cor(calschool_final, use = "complete.obs") 
+# only use non-NA observations
+
+print(corrmatrix)
+
+# This is a function that gives us not only
+# our Pearson's Coefficients, but also gives us our p-values too! This function
+# will be loaded into R, then when we run cor.prob with our data, we'll get the output.
+
+cor.prob <- function (X, dfr = nrow(X) - 2) {
+  R <- cor(X, use="pairwise.complete.obs")
+  above <- row(R) < col(R)
+  r2 <- R[above]^2
+  Fstat <- r2 * dfr/(1 - r2)
+  R[above] <- 1 - pf(Fstat, 1, dfr)
+  R[row(R) == col(R)] <- NA
+  R
+}
+
+correlation_table_calschool <- cor.prob(calschool)
+view(correlation_table_calschool)
+
+
+
+# You can save this table to your working directory with the following code:
+write.csv(
+  correlation_table_calschool,
+  file = "Correlation Matrix California Schools.csv"
+)
+
+# ggplot(DATA, aes(x=INDEP VARIABLE, y=DEP VARIABLE)) inputs the info you
+# want to graph. Then below it you add the "geoms" (graphs) that you want to
+# use to display it.
+ggplot(calschool, aes(x = meals, y = acadperf)) +
+  geom_point()
+
+ggplot(calschool, aes(x = meals, y = acadperf)) +
+  geom_smooth()
+
+ggplot(calschool, aes(x = ell, y = acadperf)) +
+  geom_smooth()
+
+# ggplot is useful because it lets us layer different kinds of graphs! We can
+# add a curve of best fit here with geom_smooth().
+ggplot(calschool, aes(x = meals, y = acadperf)) +
+  geom_point() +
+  geom_smooth()
+
+ggplot(calschool, aes(x = grad_sch, y = acadperf)) +
+  geom_point() 
+ggplot(calschool, aes(x = full, y = acadperf)) +
+  geom_point() 
+ggplot(calschool, aes(x = not_hsg, y = acadperf)) +
+  geom_point() 
+ggplot(calschool, aes(x = ell, y = acadperf)) +
+  geom_point() 
+ggplot(calschool, aes(x = yr_rnd, y = acadperf)) +
+  geom_point() 
+
+# We can also use the "group" aesthetic to divide the data by category. You can
+# only group by nominal or ordinal variables. The "col" aesthetic tells it to
+# distinguish groups by colour.
+
+# Looks like school lunch is important. Lets take a closer look by using the
+# ordinal variable mealcat, which divides the meals variable into three
+# categories:
+ggplot(calschool, aes(x = acadperf, group = mealcat, col = mealcat)) + 
+  geom_density() 
+# this is basically a histogram
+
+# VISUALIZAION OF CORRELATION MATRIX: 
+# Defaults to circles above the line and numbers below. You can use upper = and
+# lower = to change these if you want. number.cex changes the size of the number
+# fonts. tl.cex changes the size of the labels.
+corrplot.mixed(corrmatrix, number.cex = 0.5, tl.cex = 0.4)
+
+corrplot(corrmatrix, method = "number", number.cex = 0.5)
+
+corrplot(corrmatrix_final, method = "number", number.cex = 0.7)
+
+#Step 7: REGRESSION!
+# Add your first independent variable. Show your bivariate / unadjusted model.
+# Did it accord with your expectations? 
+
+# Command "lm" will fit a simple regression model to the data. 
+# The format for this code is lm(y~x, data) where y is the response (dependent variable)
+# x is the predictor (independent variable), and the data is calschool.  
+lm(acadperf ~ meals , data = calschool)
+
+regression_1 <- lm(acadperf ~ meals, data = calschool)
+summary(regression_1) 
+
+ggplot(regression_1, aes(x = meals, y = acadperf)) +
+  geom_point() +
+  geom_smooth()
+
+# STEP 8: Check for regression violations for this bivariate mode. Did you find any major violations? 
+# To analyze residuals and test assumptions, we can explore some graphs. 
+# We'll start with a histogram of the residuals (residual = predicted value - actual value). scale() standardizes observations.
+scale(regression_1$residuals) %>% 
+  hist()
+
+#or 
+
+hist(scale(regression_1$residuals))
+
+# Diagnostic graphs for a regression with plot()
+plot(regression_1)
+
+# Matrix so we can easily view 4 graphs at once. 
+layout(matrix(c(1,2,3,4),2,2)) # display the next four plots in a 2x2 grid
+plot(regression_1)
+
+# What if we want STANDARDIZED coefficients? R is a little difficult in that it
+# doesn't give them as part of the standard output. 
+# By using "scale" in our lm function, we can standardize the unit of analysis
+# to compare coefficients. Input your first variable.
+lm(scale(acadperf) ~ scale([your first variable]), data = calschool)
+
+# Mine will look like this:
+lm(scale(acadperf) ~ scale(meals), data = calschool) %>% 
+  summary() 
+names(regression_1)
+
+# You can see that we have access to the coefficients and residuals of this
+# regression. Look at just the coefficients with 
+coefficients(regression_1)
+
+# We can also specify the entire set of residuals of each point
+regression_1$residuals %>% 
+  view()
+
+# Next, we'll create a component of our regression to store our standardized
+# residuals. We'll use the standardized residuals to determine if any have an
+# absolute value greater than 2.  
+regression_1$standardized.residuals <- 
+  scale(regression_1$residuals)
+
+regression_1$large_residual <- 
+  regression_1$standardized.residuals > 2
+
+# | is the vertical bar OR operator
+regression_1$standardized.residuals < -2
+
+sum(regression_1$large_residual)
+
+# Looks like we have 17 large residuals
+
+# What is your interpretation of the results?
+# Let's calculate the Durban-Watson statistic with dwt() from the car pack
+dwt(regression_1) %>% 
+  view()
+
+library(ggplot2)
+
+# Create a histogram of residuals with bell curve line
+ggplot(data.frame(resid = regression_final$residuals), aes(x = resid)) + 
+  geom_histogram(aes(y = ..density..), color = "black", fill = "grey") + 
+  stat_function(fun = dnorm, args = list(mean = mean(regression_final$residuals), sd = sd(regression_final$residuals)), 
+                aes(color = "Bell Curve"), size = 1) +
+  labs(x = "Residuals", y = "Density") + 
+  scale_color_manual(values = "red") + 
+  theme_bw()
+
+ggplot(data.frame(resid = regression_final$residuals), aes(x = resid)) +
+  geom_histogram(aes(y = ..count..), fill="black", color="grey") +
+  labs(x="Residuals", y="Frequency", title="Histogram of Residuals") +
+  stat_function(fun = dnorm, args = list(mean = mean(regression_final$residuals), sd = sd(regression_final$residuals)), 
+                aes(color = "Bell Curve"), size = 1) +
+  scale_color_manual(values = "red") + 
+  theme_bw()
+
+
+diag_table <- data.frame("Residuals" = resid(regression_1),
+                         "Leverage" = hatvalues(regression_1))
+
+# Add row names to the data frame
+row.names(diag_table) <- row.names(calschool_final)
+
+cooks.distance(regression_1)
+
+# STEP 9: Sequentially build up the model adding variables in the order you
+# specified (don't check reg. assumptions at each stage) 
+# To build variables into your model, continue to use the lm() function, and add
+# the variable on the back side of the ~. You should update the name of the
+# model so you can save each iteration in R. The form is below. Don't forget to
+# replace with your variables in the order that you defined.
+
+#Model 2
+regression_2 <- 
+  lm(acadperf ~ meals + grad_sch, data = calschool)
+
+summary(regression_2) 
+
+ggplot(regression_2, aes(x = grad_sch, y = acadperf)) +
+  geom_point() +
+  geom_smooth()
+
+tab_model(
+  regression_2,
+  string.est = "Estimate",
+  string.ci = "Conf. Int.",
+  dv.labels = "Academic Performance"
+)
+
+#Model 3
+regression_3 <- 
+  lm(acadperf ~ meals + grad_sch + not_hsg, data = calschool)
+summary(regression_3)
+
+ggplot(regression_2, aes(x = grad_sch, y = acadperf)) +
+  geom_point() +
+  geom_smooth()
+
+tab_model(
+  regression_3,
+  string.est = "Estimate",
+  string.ci = "Conf. Int.",
+  dv.labels = "Academic Performance"
+)
+
+#Model 4
+regression_4 <- 
+  lm(acadperf ~ meals + grad_sch + not_hsg + full, data = calschool)
+  summary(regression_4)
+
+  tab_model(
+    regression_4,
+    string.est = "Estimate",
+    string.ci = "Conf. Int.",
+    dv.labels = "Academic Performance"
+  )
+  
+#Model 5
+  regression_5 <- 
+    lm(acadperf ~ meals + grad_sch + not_hsg + full + emer, data = calschool)
+  summary(regression_5)
+  
+  
+  tab_model(
+    regression_5,
+    string.est = "Estimate",
+    string.ci = "Conf. Int.",
+    dv.labels = "Academic Performance"
+  )
+    
+#Model 6
+  regression_6 <- 
+    lm(acadperf ~ meals + grad_sch + not_hsg + full + yr_rnd, data = calschool)
+  summary(regression_6)
+  
+  tab_model(
+    regression_6,
+    string.est = "Estimate",
+    string.ci = "Conf. Int.",
+    dv.labels = "Academic Performance"
+  )
+  
+#Model 7_FINAL MODEL
+  regression_final <- 
+    lm(acadperf ~ meals + grad_sch + not_hsg + full + yr_rnd + ell, data = calschool)
+  summary(regression_final)
+  
+  
+  tab_model(
+    regression_final,
+    string.est = "Estimate",
+    string.ci = "Conf. Int.",
+    dv.labels = "Academic Performance"
+  )
+  
+# Model 8:
+
+regression_7 <- lm(acadperf ~ meals + grad_sch + not_hsg + full + yr_rnd + ell + col_grad , data = calschool)
+summary(regression_7)
+
+tab_model(
+  regression_7,
+  string.est = "Estimate",
+  string.ci = "Conf. Int.",
+  dv.labels = "Academic Performance"
+)
+
+
+# STEP 10: Recheck model assumptions
+# Once we have our final model, let's check assumptions through residual
+# analysis as we did earlier.
+scale(regression_final$residuals) %>% 
+  hist() %>% 
+  line()
+
+# View all plots at once
+layout(matrix(c(1,2,3,4),2,2))
+par(mfrow=c(1,1))
+plot(regression_final)
+
+# Standardized residual analysis (how many residuals are more than two
+# deviations away)
+regression_final$standardized.residuals <- 
+  scale(regression_1$residuals)
+
+regression_final$large_residual <- 
+  regression_final$standardized.residuals > 2 | 
+  regression_final$standardized.residuals < -2
+
+sum(regression_final$large_residual)
+
+# Standardized coefficients.
+lm(
+  scale(acadperf) ~ 
+    scale(VARIABLE1) + scale(VARIABLE2) + scale(VARIABLE3), 
+  data = calschool
+) 
+
+# Mine will look like this:
+lm(
+  scale(acadperf) ~ scale(meals) + scale(grad_sch) + scale(not_hsg) + 
+  scale(full) + scale(yr_rnd) + scale(ell), data = calschool
+  ) %>% 
+  summary()
+
+# You may have more (or fewer) variables in your model in comparison to my
+# examples and that's okay. Just make sure all your variables in your final
+# model are in standardized coefficients. 
+# Now that we have multiple terms in the model, let's include the
+# multicollinearity test as well as Durbin-Watson.
+vif(regression_final)
+dwt(regression_final)
+
+vif(regression_1)
+dwt(regression_1)
+anova(regression_1)
+
+
+# Finding out which school district have high % of meals are concentrated
+library(dplyr)
+df %>%
+  group_by(dnum) %>%
+  summarize(tdiff = sum(TIME[diff(c(CONC >= 200, 0)) == -1] -
+                          TIME[diff(c(0, CONC >= 200)) == 1]))
+
+#### Advanced Extensions ##############################################
+
+# Checking to see which districts have the highest concentration of meals
+district_mean_table <- calschool %>% 
+  group_by(dnum) %>% 
+  summarize(
+    mean_meals = mean(meals, na.rm = TRUE)
+  )
+
+grouped_df <- calschool %>%
+  group_by(dnum) %>%
+  summarize(num_threes = sum(mealcat == 3))
+
+top_district <- grouped_df[order(-grouped_df$num_threes),][1,]
+
+
+# Stargazer will print two regression outputs results side by side in the 
+# console.
+stargazer(
+  regression_1, regression_final, 
+  type ="text",
+  title = "Regression Results", 
+  dep.var.labels = "Academic Performance",
+  out="table1.txt"
+)
+
+stargazer(
+  regression_1, regression_final, regression_7,
+  type ="text",
+  title = "Regression Results", 
+  dep.var.labels = "Academic Performance", 
+  out="table2.txt"
+)
+
+
+
